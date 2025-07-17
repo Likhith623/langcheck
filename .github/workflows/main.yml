@@ -35,10 +35,10 @@ jobs:
 
       - name: Push Docker image
         run: docker push gcr.io/cvoapi/fastapi-app
-
+# ...existing code...
       - name: Deploy to Cloud Run
         run: |
-          gcloud run deploy fastapi-service \
+          gcloud run deploy langdetect \
             --image gcr.io/cvoapi/fastapi-app \
             --region us-central1 \
             --platform managed \
@@ -47,7 +47,7 @@ jobs:
 
       - name: Set IAM Policy to allow public access
         run: |
-          gcloud run services add-iam-policy-binding fastapi-service \
+          gcloud run services add-iam-policy-binding langdetect \
             --region=us-central1 \
             --member="allUsers" \
             --role="roles/run.invoker"
@@ -55,9 +55,10 @@ jobs:
       - name: Display Cloud Run Service URL
         run: |
           echo "Cloud Run Service URL:"
-          gcloud run services describe fastapi-service \
+          gcloud run services describe langdetect \
             --region=us-central1 \
             --format='value(status.url)'
+# ...existing code...
 
       - name: Cleanup credentials
         run: rm -f key.json || true
