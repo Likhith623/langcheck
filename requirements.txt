@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+fasttext
+indic-transliteration
+torch
+transformers
+lingua-language-detector
+pydantic
