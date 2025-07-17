@@ -43,7 +43,8 @@ jobs:
             --region us-central1 \
             --platform managed \
             --allow-unauthenticated \
-            --memory 4Gi
+            --memory 16Gi \
+            --cpu 4
 
       - name: Set IAM Policy to allow public access
         run: |
