@@ -1,10 +1,9 @@
 FROM python:3.10-slim
 
-RUN apt-get update && apt-get install -y build-essential curl
+RUN apt-get update && apt-get install -y build-essential curl libgomp1
 
 WORKDIR /app
 
-# Download lid.176.bin into /app
 RUN curl -L -o lid.176.bin https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.bin
 
 COPY requirements.txt .
