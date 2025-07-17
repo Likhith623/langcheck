@@ -6,3 +6,4 @@ torch
 transformers
 lingua-language-detector
 pydantic
+numpy<2.0
