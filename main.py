@@ -9,6 +9,11 @@ from lingua import Language, LanguageDetectorBuilder
 from transformers import pipeline
 from fastapi.middleware.cors import CORSMiddleware
 import fasttext
+from fastapi.responses import JSONResponse
+from fastapi import Request
+from fastapi.exception_handlers import RequestValidationError
+from fastapi.exceptions import RequestValidationError
+
 # --- Model & Detector Setup ---
 
 
@@ -974,4 +979,20 @@ async def language_check(payload: InputPayload):
         "message": BOT_PERSONALITY_MAP.get(payload.bot_id, ""),
         "debug_info": debug_info
     }
+
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={"error": str(exc)}
+    )
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+print("FastText model loaded")
+print("Lingua detector loaded")
+print("Hinglish detector loaded or skipped")
 
