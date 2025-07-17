@@ -1,10 +1,8 @@
 FROM python:3.10-slim
 
 # Install system dependencies for fasttext
-RUN apt-get update && apt-get install -y build-essential
-
-# Download lid.176.bin if not present
-RUN curl -L -o lid.176.bin https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.bin
+RUN apt-get update && apt-get install -y curl build-essential \
+    && curl -L -o lid.176.bin https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.bin
 
 # Set work directory
 WORKDIR /app
