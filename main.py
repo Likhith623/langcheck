@@ -879,7 +879,8 @@ async def language_check(payload: InputPayload):
                     }
     return {
         "supported": False,
-        "detected_language": detected_lang
+        "detected_language": detected_lang,
+        "message": BOT_PERSONALITY_MAP.get(payload.bot_id, "")
     }
 
 @app.exception_handler(Exception)
