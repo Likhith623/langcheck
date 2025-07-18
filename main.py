@@ -5,7 +5,6 @@ import torch
 import re
 from fastapi import FastAPI
 from pydantic import BaseModel
-from lingua import Language, LanguageDetectorBuilder
 from transformers import pipeline
 from fastapi.middleware.cors import CORSMiddleware
 import fasttext
@@ -13,36 +12,6 @@ from fastapi.responses import JSONResponse
 from fastapi import Request
 from fastapi.exception_handlers import RequestValidationError
 from fastapi.exceptions import RequestValidationError
-
-# --- Model & Detector Setup ---
-
-
-FASTTEXT_MODEL_PATH = "lid.176.bin"
-fasttext_model = fasttext.load_model(FASTTEXT_MODEL_PATH)
-
-
-# 1. Lingua Detector for broad language identification
-ALL_SUPPORTED_LANGUAGES = [
-    Language.ENGLISH, Language.HINDI, Language.JAPANESE, Language.FRENCH, Language.GERMAN
-]
-DETECTOR = LanguageDetectorBuilder.from_languages(*ALL_SUPPORTED_LANGUAGES).with_preloaded_language_models().build()
-
-# 2. Specialized Hinglish Detector
-# This model is loaded once at startup for efficiency.
-try:
-    HINGLISH_MODEL_NAME = "l3cube-pune/hing-bert-lid"
-    device = 0 if torch.cuda.is_available() else -1
-    HINGLISH_DETECTOR = pipeline(
-        "text-classification",
-        model=HINGLISH_MODEL_NAME,
-        device=device
-    )
-    print(f"Hinglish detector model '{HINGLISH_MODEL_NAME}' loaded successfully.")
-except Exception as e:
-    print(f"CRITICAL: Failed to load Hinglish detector model. Hinglish checks will be skipped. Error: {e}")
-    HINGLISH_DETECTOR = None
-
-
 
 app = FastAPI()
 
@@ -54,7 +23,31 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Bot Configuration (No changes needed here) ---
+
+FASTTEXT_MODEL_PATH = "lid.176.bin"
+fasttext_model = fasttext.load_model(FASTTEXT_MODEL_PATH)
+
+
+FASTTEXT_LANG_MAP = {
+    "en": "english",
+    "fr": "french",
+    "hi": "hindi",
+    "de": "german",
+    "ja": "japanese",
+    "es": "spanish",
+    "ta": "tamil",
+    "si": "sinhala",
+    "ms": "malay",
+    "zh": "mandarin",      # fastText uses 'zh' for Chinese (Mandarin)
+    "zh-cn": "mandarin",   # Sometimes used for Simplified Chinese
+    "zh-tw": "mandarin",   # Sometimes used for Traditional Chinese
+    "ar": "arabic",
+   
+}
+
+
+
+
 BOT_LANGUAGE_MAP = {
     "delhi_mentor_male": ["hindi", "english"],
     "delhi_mentor_female": ["hindi", "english"],
@@ -849,137 +842,45 @@ KEYWORD_MAP = {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-FASTTEXT_LANG_MAP = {
-    "en": "english",
-    "fr": "french",
-    "hi": "hindi",
-    "de": "german",
-    "ja": "japanese",
-    "es": "spanish",
-    "ta": "tamil",
-    "si": "sinhala",
-    "ms": "malay",
-    "zh": "mandarin",      # fastText uses 'zh' for Chinese (Mandarin)
-    "zh-cn": "mandarin",   # Sometimes used for Simplified Chinese
-    "zh-tw": "mandarin",   # Sometimes used for Traditional Chinese
-    "ar": "arabic",
-   
-}
-
-
+class InputPayload(BaseModel):
+    user_message: str
+    bot_id: str
 
 def detect_language_fasttext(text: str) -> str:
     label, prob = fasttext_model.predict(text)
     lang_code = label[0].replace("__label__", "")
     return FASTTEXT_LANG_MAP.get(lang_code, "unknown")
 
-
-
-
-def normalize_and_tokenize(text: str) -> list[str]:
-    # Remove punctuation and split into lowercase words
-    return re.findall(r"\b\w+\b", text.lower())
-
-
-def detect_any_greeting_language(user_input: str, bot_languages: list[str]) -> str | None:
-    """
-    Detects a greeting language from user input, giving priority to the
-    languages supported by the specific bot.
-    """
-    tokens = normalize_and_tokenize(user_input)
-
-    # 1. Prioritize bot-supported languages
-    for lang in bot_languages:
-        if lang in KEYWORD_MAP:
-            for word in KEYWORD_MAP[lang]:
-                if word in tokens:
-                    return lang
-
-    # 2. Check unsupported languages to reject with explanation
-    for lang in KEYWORD_MAP:
-        if lang not in bot_languages:
-            for word in KEYWORD_MAP[lang]:
-                if word in tokens:
-                    return lang
-
-    return None
-
-def detect_language_with_model(text: str) -> str | None:
-    """Uses the specialized model to get a language label ('hin', 'eng', 'hin-eng')."""
-    if not HINGLISH_DETECTOR or not isinstance(text, str) or not text.strip():
-        return None
-    try:
-        prediction = HINGLISH_DETECTOR(text)[0]
-        return prediction['label']  # Return the actual label (e.g., 'hin')
-    except Exception:
-        return None
-
-def is_devanagari(text: str) -> bool:
-    return any('\u0900' <= char <= '\u097F' for char in text)
-
-class InputPayload(BaseModel):
-    bot_id: str
-    user_input: str
-
-
 @app.post("/language_check")
 async def language_check(payload: InputPayload):
-    debug_info = {
-        "bot_id": payload.bot_id,
-        "input": payload.user_input,
-        "used": ["fasttext", "keyword"],
-        "result": None,
-        "detected_language": None,
-        "keyword_language": None,
-    }
-
     if payload.bot_id not in BOT_LANGUAGE_MAP:
-        debug_info["result"] = "invalid_bot_id"
         return {
             "supported": False,
-            "message": "Invalid bot_id. Please check your bot selection.",
-            "debug_info": debug_info
+            "detected_language": None,
+            "error": "Invalid bot_id"
         }
-
     supported_languages = BOT_LANGUAGE_MAP[payload.bot_id]
-    detected_lang = detect_language_fasttext(payload.user_input)
-    debug_info["detected_language"] = detected_lang
-    debug_info["supported_languages"] = supported_languages
-
+    detected_lang = detect_language_fasttext(payload.user_message)
     # 1. FastText detection
     if detected_lang in supported_languages:
-        debug_info["result"] = "accepted_fasttext"
-        return {"supported": True, "debug_info": debug_info}
-
+        return {
+            "supported": True,
+            "detected_language": detected_lang
+        }
     # 2. Exact keyword match (case-insensitive, full string match)
-    input_clean = payload.user_input.strip().lower()
+    input_clean = payload.user_message.strip().lower()
     for lang in supported_languages:
         if lang in KEYWORD_MAP:
             for kw in KEYWORD_MAP[lang]:
                 if input_clean == kw.lower():
-                    debug_info["result"] = "accepted_keyword"
-                    debug_info["keyword_language"] = lang
-                    return {"supported": True, "debug_info": debug_info}
-
-    debug_info["result"] = "rejected"
+                    return {
+                        "supported": True,
+                        "detected_language": lang
+                    }
     return {
         "supported": False,
-        "message": BOT_PERSONALITY_MAP.get(payload.bot_id, ""),
-        "debug_info": debug_info
+        "detected_language": detected_lang
     }
-
 
 @app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception):
@@ -993,6 +894,3 @@ async def health():
     return {"status": "ok"}
 
 print("FastText model loaded")
-print("Lingua detector loaded")
-print("Hinglish detector loaded or skipped")
-
